@@ -1,56 +1,166 @@
-const express = require('express')
-const TelegramBot = require('node-telegram-bot-api');
-const {getWeatherUpdates} = require('./weather')
+const express = require("express");
+const TelegramBot = require("node-telegram-bot-api");
+const { getWeatherUpdates } = require("./weather");
+const User = require("./mongodb");
 
-require('dotenv').config()
+require("dotenv").config();
 
-token = process.env.BOT_TOKEN
+token = process.env.BOT_TOKEN;
 
 const bot = new TelegramBot(token, { polling: true });
 
-var userLon = ''
-var userLat = ''
+const note = "Note: Wrong Location? Please share your current location..."
 
-bot.onText(/\/start/, (msg) => {
-    const chatId = msg.chat.id;
-    const name = msg.chat.first_name + msg.chat.last_name
-    bot.sendMessage(chatId, "Hello " + name + "! Subscribe to get weather updates of your city automatically! Please share your location to get accurate weather updates!", {
-        reply_markup: {
-            keyboard: [
-                [
+bot.onText(/\/start/, async (msg) => {
+  var name = "";
+  const chatId = msg.chat.id;
+  const currentUser = await User.findOne({ chat_id: chatId });
+  const firstName = msg.chat.first_name;
+  const lastName = msg.chat.last_name;
+  const userName = msg.chat.username;
+  if (firstName) {
+    if (lastName) {
+      name = firstName + lastName;
+    } else {
+      name = firstName;
+    }
+  } else {
+    name = userName;
+  }
+  if (currentUser) {
+    bot.sendMessage(
+      chatId,
+      `Hey ${name}!\n You've already subscribed! Weather updates are on your way.`
+    );
+    bot.sendChatAction(chatId, "typing");
+    if (currentUser.location.length){
+        bot.sendChatAction(chatId, "typing");
+        const message = await getWeatherUpdates(
+          currentUser.location[0],
+          currentUser.location[1]
+        );
+        bot.sendMessage(chatId, message);
+    } else {
+        bot.sendMessage(chatId, "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!", {
+            reply_markup: {
+                keyboard: [
+                  [
                     {
-                        text: 'Share Location',
-                        'request_location': true
-                    }
-                ]
-            ],
-            one_time_keyboard: true
-        }
-    })
-  });
-
-bot.on('location', (msg) => {
-    const chatId = msg.chat.id;
-    const location = msg.location; // The user's location data
-    userLat = location.latitude;
-    userLon = location.longitude;
-    bot.sendMessage(chatId, "Thankyou for sharing location.\nUse /subscribe to start getting Weather Updates.")
-})
+                      text: "Share Location",
+                      request_location: true,
+                    },
+                  ],
+                ],
+                one_time_keyboard: true,
+              },
+        })
+    }
+  } else {
+    bot.sendMessage(
+      chatId,
+      `Hello ${name}! Subscribe to get weather updates of your city automatically!\nTo Subscribe, click here --> /subscribe`
+    );
+  }
+});
 
 bot.onText(/\/subscribe/, async (msg) => {
-    const chatId = msg.chat.id;
-    const weatherUpdate = await getWeatherUpdates(userLat, userLon)
+  var name = "";
+  const chatId = msg.chat.id;
+  bot.sendChatAction(chatId, "typing");
+  const currentUser = await User.findOne({ chat_id: chatId });
+  const firstName = msg.chat.first_name;
+  const lastName = msg.chat.last_name;
+  const userName = msg.chat.username;
 
-    const message = "Current Weather: " + weatherUpdate['currentWeather'] + "\n" +
-                    "🌡️ Temperature: " + weatherUpdate['temperature'] +
-                    "🌡️ Feels Like: " + weatherUpdate['feelsLike'] +
-                    "🌊 Humidity: " + weatherUpdate['humidity'] +
-                    "💨 Wind: " + weatherUpdate['wind'] + 
-                    "☁️ Clouds: " + weatherUpdate['clouds'] +
-                    "🌞 Sunrise: " + weatherUpdate['sunrise'] + 
-                    "🌅 Sunset: " + weatherUpdate['sunset'] +
-                    weatherUpdate['description'] + " in " + weatherUpdate['city'] + ", " + weatherUpdate['country'] + "\n" +
-                    "Enjoy your day! ☔️"
+  if (currentUser) {
+    if (firstName) {
+      if (lastName) {
+        name = firstName + lastName;
+      } else {
+        name = firstName;
+      }
+    } else {
+      name = userName;
+    }
+    bot.sendMessage(
+      chatId,
+      `Hey ${name}! You're already our subscriber! Weather updates are on your way.`
+    );
+    if (currentUser.location.length){
+        bot.sendChatAction(chatId, "typing");
+        const message = await getWeatherUpdates(
+          currentUser.location[0],
+          currentUser.location[1]
+        );
+        bot.sendMessage(chatId, message);
+    } else {
+        bot.sendMessage(chatId, "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!", {
+            reply_markup: {
+                keyboard: [
+                  [
+                    {
+                      text: "Share Location",
+                      request_location: true,
+                    },
+                  ],
+                ],
+                one_time_keyboard: true,
+              },
+        })
+    }
+  } else {
+    const createdUser = await User.create({
+      chat_id: chatId,
+      firstname: firstName,
+      lastname: lastName,
+      username: userName,
+    });
+    bot.sendChatAction(chatId, "typing");
+    bot.sendMessage(
+      chatId,
+      "Thank you for subscribing to Hospals Weather Bot!\nFrom now, You'll get weather updates periodically!"
+    );
+    bot.sendMessage(
+      chatId,
+      "For better and accurate weather updates, Please share your location",
+      {
+        reply_markup: {
+          keyboard: [
+            [
+              {
+                text: "Share Location",
+                request_location: true,
+              },
+            ],
+          ],
+          one_time_keyboard: true,
+        },
+      }
+    );
+  }
+});
 
-    bot.sendMessage(chatId, message)
+bot.on("location", async (msg) => {
+  const chatId = msg.chat.id;
+  const currentUser = await User.findOne({ chat_id: chatId });
+  if (currentUser) {
+    const location = msg.location; // The user's location data
+    const userLocation = [location.latitude, location.longitude];
+    await User.findOneAndUpdate(
+      { chat_id: chatId },
+      { location: userLocation }
+    );
+    bot.sendMessage(chatId, "Thankyou for sharing location.");
+    bot.sendChatAction(chatId, "typing");
+    const message = await getWeatherUpdates(
+      location.latitude,
+      location.longitude
+    );
+    bot.sendMessage(chatId, message);
+  } else {
+    bot.sendMessage(
+      chatId,
+      "You're not subscribed to Hospals Weather Bot.\n To subscribe, \n click on --> /subscribe"
+    );
+  }
 });
