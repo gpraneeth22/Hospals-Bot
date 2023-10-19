@@ -1,15 +1,14 @@
-const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
+require("dotenv").config();
+
 const { getWeatherUpdates } = require("./weather");
 const User = require("./mongodb");
-
-require("dotenv").config();
 
 token = process.env.BOT_TOKEN;
 
 const bot = new TelegramBot(token, { polling: true });
 
-const note = "Note: Wrong Location? Please share your current location..."
+const note = "Note: Wrong Location? Please share your current location...";
 
 bot.onText(/\/start/, async (msg) => {
   var name = "";
@@ -33,27 +32,31 @@ bot.onText(/\/start/, async (msg) => {
       `Hey ${name}!\n You've already subscribed! Weather updates are on your way.`
     );
     bot.sendChatAction(chatId, "typing");
-    if (currentUser.location.length){
-        bot.sendChatAction(chatId, "typing");
-        const message = await getWeatherUpdates(
-          currentUser.location[0],
-          currentUser.location[1]
-        );
-        bot.sendMessage(chatId, message);
+    if (currentUser.location.length) {
+      bot.sendChatAction(chatId, "typing");
+      const update = await getWeatherUpdates(
+        currentUser.location[0],
+        currentUser.location[1]
+      );
+      bot.sendMessage(chatId, update["msg"]);
     } else {
-        bot.sendMessage(chatId, "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!", {
-            reply_markup: {
-                keyboard: [
-                  [
-                    {
-                      text: "Share Location",
-                      request_location: true,
-                    },
-                  ],
-                ],
-                one_time_keyboard: true,
-              },
-        })
+      bot.sendMessage(
+        chatId,
+        "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!",
+        {
+          reply_markup: {
+            keyboard: [
+              [
+                {
+                  text: "Share Location",
+                  request_location: true,
+                },
+              ],
+            ],
+            one_time_keyboard: true,
+          },
+        }
+      );
     }
   } else {
     bot.sendMessage(
@@ -86,27 +89,31 @@ bot.onText(/\/subscribe/, async (msg) => {
       chatId,
       `Hey ${name}! You're already our subscriber! Weather updates are on your way.`
     );
-    if (currentUser.location.length){
-        bot.sendChatAction(chatId, "typing");
-        const message = await getWeatherUpdates(
-          currentUser.location[0],
-          currentUser.location[1]
-        );
-        bot.sendMessage(chatId, message);
+    if (currentUser.location.length) {
+      bot.sendChatAction(chatId, "typing");
+      const update = await getWeatherUpdates(
+        currentUser.location[0],
+        currentUser.location[1]
+      );
+      bot.sendMessage(chatId, update["msg"]);
     } else {
-        bot.sendMessage(chatId, "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!", {
-            reply_markup: {
-                keyboard: [
-                  [
-                    {
-                      text: "Share Location",
-                      request_location: true,
-                    },
-                  ],
-                ],
-                one_time_keyboard: true,
-              },
-        })
+      bot.sendMessage(
+        chatId,
+        "I don't have your location information. Feel free to share your location details for weather updates\n NOTE: We store you location details very securely!",
+        {
+          reply_markup: {
+            keyboard: [
+              [
+                {
+                  text: "Share Location",
+                  request_location: true,
+                },
+              ],
+            ],
+            one_time_keyboard: true,
+          },
+        }
+      );
     }
   } else {
     const createdUser = await User.create({
@@ -146,17 +153,17 @@ bot.on("location", async (msg) => {
   if (currentUser) {
     const location = msg.location; // The user's location data
     const userLocation = [location.latitude, location.longitude];
-    await User.findOneAndUpdate(
-      { chat_id: chatId },
-      { location: userLocation }
-    );
     bot.sendMessage(chatId, "Thankyou for sharing location.");
     bot.sendChatAction(chatId, "typing");
-    const message = await getWeatherUpdates(
+    const update = await getWeatherUpdates(
       location.latitude,
       location.longitude
     );
-    bot.sendMessage(chatId, message);
+    await User.findOneAndUpdate(
+      { chat_id: chatId },
+      { location: userLocation, city: update['city'], country: update['country'] }
+    );
+    bot.sendMessage(chatId, update['msg']);
   } else {
     bot.sendMessage(
       chatId,

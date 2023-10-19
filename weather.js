@@ -33,7 +33,7 @@ const getWeatherUpdates = async (lat, lon) => {
                     "🌅 Sunset: " + weatherUpdate['sunset'] +
                     weatherUpdate['description'] + " in " + weatherUpdate['city'] + ", " + weatherUpdate['country'] + "\n" +
                     "Enjoy your day! ☔️"
-    return message
+    return {"msg": message, "city": weatherUpdate['city'], "country": weatherUpdate['country']}
 
 }
 
